@@ -28,42 +28,48 @@ func (self *Scanner) Scan(roots ...string) <-chan []*FileMatch {
 	go func() {
 		defer close(matchchan)
 
-		for _, root := range roots {
-			if rules, err := self.LoadRulesFromPath(root); err == nil {
-				matches := make([]*FileMatch, 0)
-				var lastParent string
+		for _, relroot := range roots {
+			if root, err := filepath.Abs(relroot); err == nil {
 
-				if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-					count += 1
+				if rules, err := self.LoadRulesFromPath(root); err == nil {
+					matches := make([]*FileMatch, 0)
+					var lastParent string
 
-					if lastParent != `` && filepath.Dir(path) != lastParent && len(matches) > 0 {
-						matchchan <- matches
-						matches = nil
-					}
+					if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+						count += 1
 
-					if err == nil && info.Mode().IsRegular() {
-						if rule, m := rules.Match(path); m != nil {
-							fm := &FileMatch{
-								Path: path,
-								Rule: rule,
-								Tags: make(map[string]interface{}),
-							}
-
-							for c, v := range m.NamedCaptures() {
-								fm.Tags[c] = stringutil.Autotype(v)
-							}
-
-							matches = append(matches, fm)
-						} else {
-							log.Debugf("SCAN: %v", path)
+						if lastParent != `` && filepath.Dir(path) != lastParent && len(matches) > 0 {
+							matchchan <- matches
+							matches = nil
 						}
-					}
 
-					lastParent = filepath.Dir(path)
-					return nil
-				}); err == nil {
-					if len(matches) > 0 {
-						matchchan <- matches
+						if err == nil && info.Mode().IsRegular() {
+							if rule, m := rules.Match(path); m != nil {
+								fm := &FileMatch{
+									Path: path,
+									Rule: rule,
+									Tags: make(map[string]interface{}),
+								}
+
+								for c, v := range m.NamedCaptures() {
+									fm.Tags[c] = stringutil.Autotype(v)
+								}
+
+								matches = append(matches, fm)
+							} else {
+								log.Debugf("SCAN: %v", path)
+							}
+						}
+
+						lastParent = filepath.Dir(path)
+						return nil
+					}); err == nil {
+						if len(matches) > 0 {
+							matchchan <- matches
+						}
+					} else {
+						log.Error(err)
+						return
 					}
 				} else {
 					log.Error(err)
