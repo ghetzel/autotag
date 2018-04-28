@@ -8,14 +8,14 @@ import (
 
 type Rules []*Rule
 
-func (self Rules) Match(filepath string) *rxutil.MatchResult {
+func (self Rules) Match(filepath string) (*Rule, *rxutil.MatchResult) {
 	for _, rule := range self {
 		if match := rule.Match(filepath); match != nil {
-			return match
+			return rule, match
 		}
 	}
 
-	return nil
+	return nil, nil
 }
 
 type Rule struct {

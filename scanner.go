@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/ghetzel/go-stockutil/log"
 	"github.com/ghetzel/go-stockutil/pathutil"
+	"github.com/ghetzel/go-stockutil/stringutil"
 )
 
 var AutotagFile string = `autotag.list`
@@ -21,37 +21,65 @@ func NewScanner() *Scanner {
 	return &Scanner{}
 }
 
-func (self *Scanner) Scan(root string) error {
+func (self *Scanner) Scan(roots ...string) <-chan []*FileMatch {
 	var count int
+	var matchchan = make(chan []*FileMatch)
 
-	if rules, err := self.LoadRulesFromPath(root); err == nil {
-		if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-			count += 1
+	go func() {
+		defer close(matchchan)
 
-			if err == nil {
-				if m := rules.Match(path); m != nil {
-					out := ``
+		for _, root := range roots {
+			if rules, err := self.LoadRulesFromPath(root); err == nil {
+				matches := make([]*FileMatch, 0)
+				var lastParent string
 
-					for c, v := range m.NamedCaptures() {
-						out += fmt.Sprintf("\n  % 12s: %v", c, v)
+				if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+					count += 1
+
+					if lastParent != `` && filepath.Dir(path) != lastParent && len(matches) > 0 {
+						matchchan <- matches
+						matches = nil
 					}
 
-					log.Infof("MATCH: %v%v", path, out)
-				} else {
-					log.Debugf("SCAN: %v", path)
-				}
-			}
+					if err == nil && info.Mode().IsRegular() {
+						if rule, m := rules.Match(path); m != nil {
+							fm := &FileMatch{
+								Path: path,
+								Rule: rule,
+								Tags: make(map[string]interface{}),
+							}
 
-			return nil
-		}); err == nil {
-			log.Infof("Scan completed, read %d files", count)
-			return nil
-		} else {
-			return err
+							for c, v := range m.NamedCaptures() {
+								fm.Tags[c] = stringutil.Autotype(v)
+							}
+
+							matches = append(matches, fm)
+						} else {
+							log.Debugf("SCAN: %v", path)
+						}
+					}
+
+					lastParent = filepath.Dir(path)
+					return nil
+				}); err == nil {
+					if len(matches) > 0 {
+						matchchan <- matches
+					}
+				} else {
+					log.Error(err)
+					return
+				}
+			} else {
+				log.Error(err)
+				return
+			}
 		}
-	} else {
-		return err
-	}
+
+		log.Infof("Scan completed, read %d files", count)
+		return
+	}()
+
+	return matchchan
 }
 
 func (self *Scanner) LoadRulesFromPath(root string) (Rules, error) {
