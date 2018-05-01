@@ -15,10 +15,18 @@ import (
 var AutotagFile string = `autotag.list`
 
 type Scanner struct {
+	PatternFile string
+	overrides   map[string]interface{}
 }
 
 func NewScanner() *Scanner {
-	return &Scanner{}
+	return &Scanner{
+		overrides: make(map[string]interface{}),
+	}
+}
+
+func (self *Scanner) Override(key string, value interface{}) {
+	self.overrides[key] = value
 }
 
 func (self *Scanner) Scan(roots ...string) <-chan []*FileMatch {
@@ -30,51 +38,68 @@ func (self *Scanner) Scan(roots ...string) <-chan []*FileMatch {
 
 		for _, relroot := range roots {
 			if root, err := filepath.Abs(relroot); err == nil {
+				var rules Rules
+				var patternFile string
 
-				if rules, err := self.LoadRulesFromPath(root); err == nil {
-					matches := make([]*FileMatch, 0)
-					var lastParent string
+				if self.PatternFile == `` {
+					patternFile = root
+				} else {
+					patternFile = self.PatternFile
+				}
 
-					if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-						count += 1
+				if r, err := self.LoadRulesFromPath(patternFile); err == nil {
+					rules = r
+				} else {
+					log.Error(err)
+					return
+				}
 
-						if lastParent != `` && filepath.Dir(path) != lastParent && len(matches) > 0 {
-							matchchan <- matches
-							matches = nil
-						}
+				matches := make([]*FileMatch, 0)
+				var lastParent string
 
-						if err == nil && info.Mode().IsRegular() {
-							if rule, m := rules.Match(path); m != nil {
-								fm := &FileMatch{
-									Path: path,
-									Rule: rule,
-									Tags: make(map[string]interface{}),
-								}
+				if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+					count += 1
 
-								for c, v := range m.NamedCaptures() {
-									fm.Tags[c] = stringutil.Autotype(v)
-								}
+					if lastParent != `` && filepath.Dir(path) != lastParent && len(matches) > 0 {
+						matchchan <- matches
+						matches = nil
+					}
 
-								matches = append(matches, fm)
-							} else {
-								log.Debugf("SCAN: %v", path)
+					if err == nil && info.Mode().IsRegular() {
+						if rule, m := rules.Match(path); m != nil {
+							fm := &FileMatch{
+								Path: path,
+								Rule: rule,
+								Tags: make(map[string]interface{}),
 							}
-						}
 
-						lastParent = filepath.Dir(path)
-						return nil
-					}); err == nil {
-						if len(matches) > 0 {
-							matchchan <- matches
+							// extract values from named captures
+							for c, v := range m.NamedCaptures() {
+								fm.Tags[c] = stringutil.Autotype(v)
+							}
+
+							// apply overrides
+							for o, k := range self.overrides {
+								fm.Tags[o] = k
+							}
+
+							matches = append(matches, fm)
+						} else {
+							log.Debugf("SCAN: %v", path)
 						}
-					} else {
-						log.Error(err)
-						return
+					}
+
+					lastParent = filepath.Dir(path)
+					return nil
+				}); err == nil {
+					if len(matches) > 0 {
+						matchchan <- matches
 					}
 				} else {
 					log.Error(err)
 					return
 				}
+
 			} else {
 				log.Error(err)
 				return

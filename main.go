@@ -9,6 +9,7 @@ import (
 	"github.com/ghetzel/cli"
 	"github.com/ghetzel/go-stockutil/log"
 	"github.com/ghetzel/go-stockutil/maputil"
+	"github.com/ghetzel/go-stockutil/stringutil"
 )
 
 func main() {
@@ -37,6 +38,14 @@ func main() {
 			Name:  `all, A`,
 			Usage: `Process all matches at once instead of grouping by parent directory.`,
 		},
+		cli.StringSliceFlag{
+			Name:  `tag, t`,
+			Usage: `Specify a tag in key=value format to apply to all matched files.`,
+		},
+		cli.StringFlag{
+			Name:  `pattern-file, p`,
+			Usage: `Explicitly specify a pattern file to use for parsing filenames.`,
+		},
 	}
 
 	app.Before = func(c *cli.Context) error {
@@ -57,7 +66,17 @@ func main() {
 			roots = []string{`.`}
 		}
 
-		for matches := range NewScanner().Scan(roots...) {
+		scanner := NewScanner()
+
+		scanner.PatternFile = c.String(`pattern-file`)
+
+		for _, pair := range c.StringSlice(`tag`) {
+			if k, v := stringutil.SplitPair(pair, `=`); v != `` {
+				scanner.Override(k, stringutil.Autotype(v))
+			}
+		}
+
+		for matches := range scanner.Scan(roots...) {
 			if c.Bool(`all`) {
 				allMatches = append(allMatches, matches...)
 			} else {
