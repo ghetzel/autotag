@@ -10,6 +10,8 @@ type TaglibWriter struct {
 
 func (self *TaglibWriter) WriteFile(path string, tags map[string]interface{}) error {
 	if file, err := taglib.Read(path); err == nil {
+		defer file.Close()
+
 		tags := maputil.M(tags)
 		didAnything := false
 
