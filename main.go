@@ -16,7 +16,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = `autotag`
 	app.Usage = `Automatically tag media files based on filename patterns.`
-	app.Version = `0.0.3`
+	app.Version = `0.0.4`
 	app.EnableBashCompletion = false
 
 	app.Flags = []cli.Flag{
