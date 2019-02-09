@@ -15,6 +15,11 @@ func (self *MetaflacWriter) WriteFile(path string, tagsmap map[string]interface{
 	names := make([]string, 0)
 	tags := maputil.M(tagsmap)
 
+	if v := tags.Int(`disc`, 0); v > 0 {
+		names = append(names, `DISCNUMBER`)
+		tagArgs = append(tagArgs, fmt.Sprintf("DISCNUMBER=%d", v))
+	}
+
 	if v := tags.Int(`track`, 0); v > 0 {
 		names = append(names, `TRACKNUMBER`)
 		tagArgs = append(tagArgs, fmt.Sprintf("TRACKNUMBER=%d", v))
