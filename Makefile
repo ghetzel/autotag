@@ -13,3 +13,4 @@ fmt:
 
 build: fmt
 	go build -o bin/autotag .
+	which autotag && cp bin/autotag $(shell which autotag)
