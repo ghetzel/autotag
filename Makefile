@@ -1,14 +1,17 @@
 .PHONY: build ui
 
+GO111MODULE ?= on
+
+.EXPORT_ALL_VARIABLES:
+
 all: fmt deps build
 
 deps:
-	@go list golang.org/x/tools/cmd/goimports || go get golang.org/x/tools/cmd/goimports
 	go generate -x
-	go get .
+	go get ./...
 
 fmt:
-	goimports -w .
+	gofmt -w .
 	go vet .
 
 build: fmt
