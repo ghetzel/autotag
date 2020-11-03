@@ -11,9 +11,9 @@ type MetaflacWriter struct {
 }
 
 func (self *MetaflacWriter) WriteFile(path string, tagsmap map[string]interface{}) error {
-	tagArgs := make([]string, 0)
-	names := make([]string, 0)
-	tags := maputil.M(tagsmap)
+	var tagArgs = make([]string, 0)
+	var names = make([]string, 0)
+	var tags = maputil.M(tagsmap)
 
 	if v := tags.Int(`disc`, 0); v > 0 {
 		names = append(names, `DISCNUMBER`)
@@ -46,7 +46,7 @@ func (self *MetaflacWriter) WriteFile(path string, tagsmap map[string]interface{
 	}
 
 	if len(tagArgs) > 0 {
-		args := []string{}
+		var args = make([]string, 0)
 
 		for _, nm := range names {
 			args = append(args, fmt.Sprintf("--remove-tag=%v", nm))

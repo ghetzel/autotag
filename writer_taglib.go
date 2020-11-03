@@ -12,8 +12,8 @@ func (self *TaglibWriter) WriteFile(path string, tags map[string]interface{}) er
 	if file, err := taglib.Read(path); err == nil {
 		defer file.Close()
 
-		tags := maputil.M(tags)
-		didAnything := false
+		var tags = maputil.M(tags)
+		var didAnything bool
 
 		if v := tags.Int(`track`, 0); v > 0 {
 			file.SetTrack(int(v))

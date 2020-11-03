@@ -11,6 +11,7 @@ type FileMatch struct {
 	Path string
 	Rule *Rule
 	Tags map[string]interface{}
+	opts *ScanOptions
 }
 
 func (self *FileMatch) String() string {
@@ -22,10 +23,20 @@ func (self *FileMatch) Apply() error {
 
 	switch path.Ext(self.Path) {
 	case `.flac`, `.ogg`:
-		writer = &MetaflacWriter{}
+		writer = new(MetaflacWriter)
 	default:
-		writer = &TaglibWriter{}
+		writer = new(TaglibWriter)
 	}
 
-	return writer.WriteFile(self.Path, self.Tags)
+	if err := writer.WriteFile(self.Path, self.Tags); err == nil {
+		if self.opts != nil {
+			if err := self.opts.writeXattr(self.Path, self.Tags); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	} else {
+		return err
+	}
 }

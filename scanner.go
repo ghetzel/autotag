@@ -6,13 +6,68 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/ghetzel/go-defaults"
 	"github.com/ghetzel/go-stockutil/log"
 	"github.com/ghetzel/go-stockutil/pathutil"
 	"github.com/ghetzel/go-stockutil/stringutil"
+	"github.com/ghetzel/go-stockutil/typeutil"
+	"github.com/ivaxer/go-xattr"
 )
 
 var AutotagFile string = `autotag.list`
+
+const (
+	XattrKeyValueSeparator    = `:`
+	XattrPropLastUpdatedEpoch = `last_updated_at`
+	XattrPropAppVersion       = `app_version`
+)
+
+type ScanOptions struct {
+	XattrPrefix string `defaults:"user.cool.gary.autotag"`
+	FastScan    bool   `defaults:"true"`
+}
+
+func (self *ScanOptions) xk(propname string) string {
+	return self.XattrPrefix + `.` + propname
+}
+
+func (self *ScanOptions) xattr(path string, propname string) typeutil.Variant {
+	if attr, err := xattr.Get(path, self.xk(propname)); err == nil {
+		return typeutil.V(typeutil.Auto(attr))
+	}
+
+	return typeutil.V(nil)
+}
+
+func (self *ScanOptions) writeXattr(path string, tags map[string]interface{}) error {
+	for k, v := range tags {
+		if err := xattr.Set(
+			path,
+			self.xk(`tag_`+stringutil.Underscore(
+				strings.ToLower(k),
+			)),
+			[]byte(typeutil.String(v)),
+		); err != nil {
+			return err
+		}
+	}
+
+	if err := xattr.Set(
+		path,
+		self.xk(XattrPropAppVersion),
+		[]byte(Version),
+	); err != nil {
+		return err
+	}
+
+	return xattr.Set(
+		path,
+		self.xk(XattrPropLastUpdatedEpoch),
+		[]byte(typeutil.String(time.Now().UnixNano())),
+	)
+}
 
 type Scanner struct {
 	PatternFile string
@@ -30,6 +85,16 @@ func (self *Scanner) Override(key string, value interface{}) {
 }
 
 func (self *Scanner) Scan(roots ...string) <-chan []*FileMatch {
+	return self.ScanWithOptions(nil, roots...)
+}
+
+func (self *Scanner) ScanWithOptions(options *ScanOptions, roots ...string) <-chan []*FileMatch {
+	if options == nil {
+		options = new(ScanOptions)
+	}
+
+	defaults.SetDefaults(options)
+
 	var count int
 	var matchchan = make(chan []*FileMatch)
 
@@ -54,7 +119,7 @@ func (self *Scanner) Scan(roots ...string) <-chan []*FileMatch {
 					return
 				}
 
-				matches := make([]*FileMatch, 0)
+				var matches = make([]*FileMatch, 0)
 				var lastParent string
 
 				if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -66,8 +131,16 @@ func (self *Scanner) Scan(roots ...string) <-chan []*FileMatch {
 					}
 
 					if err == nil && info.Mode().IsRegular() {
+						// if doing a fast scan, only files that do not have the last updated timestamp xattr will be processed
+						if options.FastScan {
+
+							if options.xattr(path, XattrPropLastUpdatedEpoch).Int() > 0 {
+								return nil
+							}
+						}
+
 						if rule, m := rules.Match(path); m != nil {
-							fm := &FileMatch{
+							var fm = &FileMatch{
 								Path: path,
 								Rule: rule,
 								Tags: make(map[string]interface{}),
@@ -114,9 +187,8 @@ func (self *Scanner) Scan(roots ...string) <-chan []*FileMatch {
 }
 
 func (self *Scanner) LoadRulesFromPath(root string) (Rules, error) {
-	rules := make(Rules, 0)
-
-	filename := filepath.Join(root, AutotagFile)
+	var rules = make(Rules, 0)
+	var filename = filepath.Join(root, AutotagFile)
 
 	// if the path exists
 	if pathutil.FileExists(filename) {
@@ -124,11 +196,11 @@ func (self *Scanner) LoadRulesFromPath(root string) (Rules, error) {
 			log.Debugf("Read pattern file: %v", filename)
 			defer file.Close()
 
-			lines := bufio.NewScanner(file)
+			var lines = bufio.NewScanner(file)
 
 			// parse the tagfile
 			for lines.Scan() {
-				line := lines.Text()
+				var line = lines.Text()
 				line = strings.TrimSpace(line)
 
 				if strings.HasPrefix(line, `#`) || line == `` {

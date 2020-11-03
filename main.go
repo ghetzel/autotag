@@ -16,7 +16,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = `autotag`
 	app.Usage = `Automatically tag media files based on filename patterns.`
-	app.Version = `0.0.4`
+	app.Version = Version
 	app.EnableBashCompletion = false
 
 	app.Flags = []cli.Flag{
@@ -46,6 +46,14 @@ func main() {
 			Name:  `pattern-file, p`,
 			Usage: `Explicitly specify a pattern file to use for parsing filenames.`,
 		},
+		cli.BoolFlag{
+			Name:  `fast, f`,
+			Usage: `Perform a quick scan by only modifying files that haven't been tagged yet by this program.`,
+		},
+		cli.StringFlag{
+			Name:  `xattr-property-prefix`,
+			Value: `user.cool.gary.autotag`,
+		},
 	}
 
 	app.Before = func(c *cli.Context) error {
@@ -56,17 +64,16 @@ func main() {
 	}
 
 	app.Action = func(c *cli.Context) {
-		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', 0)
+		var tw = tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', 0)
 		var allMatches []*FileMatch
 		var roots []string
+		var scanner = NewScanner()
 
 		if c.NArg() > 0 {
 			roots = []string(c.Args())
 		} else {
 			roots = []string{`.`}
 		}
-
-		scanner := NewScanner()
 
 		scanner.PatternFile = c.String(`pattern-file`)
 
